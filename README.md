@@ -15,8 +15,9 @@
 6. [Anna's Archive 深度分析](#6-annas-archive-深度分析)
 7. [Anna's Archive 藏书验证](#7-annas-archive-藏书验证)
 8. [绕过 DDoS-Guard 的下载方案](#8-绕过-ddos-guard-的下载方案)
-9. [总结与推荐](#9-总结与推荐)
+9. [AI EPUB 阅读器对比](#9-ai-epub-阅读器对比)
 10. [实际下载验证](#10-实际下载验证)
+11. [总结与推荐](#11-总结与推荐)
 
 ---
 
@@ -596,7 +597,52 @@ ZLIB_MIRROR_URLS="https://z-library.sk https://z-lib.fm https://1lib.sk https://
 
 ---
 
-## 9. 总结与推荐
+## 9. AI EPUB 阅读器对比
+
+调研过程中发现两个同名的 AI 阅读器项目 Marginalia，均以"书页边缘 AI 对话"为核心概念。
+
+### 9.1 功能对比
+
+| 维度 | eddmann/Marginalia | EurFelux/marginalia |
+|------|------------------|-------------------|
+| **技术栈** | Tauri v2 + Rust + Next.js + TypeScript | Electron + React + TypeScript |
+| **成熟度** | v0.0.2, 7 commits, 2 releases | **v0.16.0, 1,150 commits, 15 releases** |
+| **格式** | EPUB, PDF, MOBI, AZW3, FB2, CBZ, TXT, MD | **EPUB, PDF** |
+| **AI 模型** | Claude (Opus/Sonnet), GPT-5.4 | **OpenAI / Anthropic / Google / 任意兼容端点** |
+| **API Key 配置** | ❌ 自动加载 Claude Code/Codex CLI 凭据，不可自配 | ✅ **用户自行配置，支持任意 OpenAI 兼容端点** |
+| **翻译** | ❌ | ✅ **一键 Explain / Translate / Summarize** |
+| **TTS 朗读** | ❌ | ✅ **Web Speech API，跨平台，无需配置** |
+| **上下文透明** | ❌ | ✅ 可视化 context chips（选中段/章节/全书摘要） |
+| **AI 记忆** | ❌ | ✅ 跨对话持久化，可读/编辑/删除 |
+| **Persona** | ❌ | ✅ 自定义助手名称、人格、常驻指令 |
+| **批注** | ✅ 高亮、书签、标注 (Markdown 导出) | ✅ 5 色高亮 + 下划线 + 便签 + Markdown 笔记本 |
+| **全库搜索** | ✅ | ❌ |
+| **库视图** | 列表 | ✅ Apple Books 风格书墙，拖拽导入 |
+| **本地优先** | ✅ | ✅ |
+| **平台** | macOS + Linux | **macOS**（Homebrew + dmg） |
+| **中文** | ❌ | ✅ **双语界面**（English / 简体中文） |
+| **许可证** | AGPL-3.0 | GPL-3.0 |
+
+### 9.2 EurFelux/marginalia TTS 原理
+
+- **驱动**: Web Speech API（`window.speechSynthesis`）
+- **跨平台**: macOS (NSSpeechSynthesizer) / Windows (SAPI5) / Linux (speech-dispatcher)
+- **配置**: **零配置**，开箱即用，使用系统自带语音
+- **音色推荐**: 目前仅 macOS 做了精选（英文 Samantha/Alex/Karen/Daniel，中文 Tingting/婷婷/Meijia/美佳）
+- **数据安全**: 不上传任何数据，"speaks with the voices already on your machine"
+
+### 9.3 选择建议
+
+| 需求 | 推荐 |
+|------|------|
+| 格式种类多、搜索全库 | **eddmann/Marginalia**（支持 8 种格式） |
+| AI 翻译 + TTS + 中文 | **EurFelux/marginalia**（双语 + 朗读） |
+| 自定义 API Key | **EurFelux/marginalia**（任意 OpenAI 兼容端点） |
+| 多平台（非 macOS） | **eddmann/Marginalia**（macOS + Linux）或 Koodo Reader |
+| 纯阅读 + 批量管理 | **Calibre + cal-annas**（最成熟） |
+
+
+## 11. 总结与推荐
 
 ### 8.1 各场景最佳选择
 
