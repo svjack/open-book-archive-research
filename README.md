@@ -11,10 +11,11 @@
 2. [GitHub 上的 Z-Library 相关项目](#2-github-上的-z-library-相关项目)
 3. [zlibrary.koplugin 源码分析](#3-zlibrarykoplugin-源码分析)
 4. [免费 EPUB 下载平台对比](#4-免费-epub-下载平台对比)
-5. [Anna's Archive 深度分析](#5-annas-archive-深度分析)
-6. [Anna's Archive 藏书验证](#6-annas-archive-藏书验证)
-7. [绕过 DDoS-Guard 的下载方案](#7-绕过-ddos-guard-的下载方案)
-8. [总结与推荐](#8-总结与推荐)
+5. [核心项目: a-peirogon/cal-annas](#5-核心项目-a-peirogoncal-annas)
+6. [Anna's Archive 深度分析](#6-annas-archive-深度分析)
+7. [Anna's Archive 藏书验证](#7-annas-archive-藏书验证)
+8. [绕过 DDoS-Guard 的下载方案](#8-绕过-ddos-guard-的下载方案)
+9. [总结与推荐](#9-总结与推荐)
 
 ---
 
@@ -157,7 +158,294 @@ end
 
 ---
 
-## 5. Anna's Archive 深度分析
+## 5. 核心项目: a-peirogon/cal-annas
+
+### 5.1 项目概述
+
+此项目是本调研的**核心源头项目** — 一个 Calibre 商店插件，用于从 Anna's Archive 搜索和下载图书。
+
+- **GitHub**: https://github.com/a-peirogon/cal-annas
+- **Stars**: ⭐10
+- **语言**: Python
+- **最近推送**: 2026-06-21
+- **许可证**: GPL-3.0
+
+```python
+# 源码: annas_archive.py — 约 1251 行
+# 核心模块:
+#   annas_archive.py  — Calibre 商店插件主逻辑（搜索 + 下载拦截器）
+#   config.py         — Qt 配置界面（镜像管理、搜索过滤）
+#   constants.py      — 默认镜像、缓存实现、搜索选项定义
+```
+
+### 5.2 搜索结果解析
+
+*`a-peirogon/cal-annas/annas_archive.py`*
+
+插件通过以下方式从 Anna's Archive 搜索页面提取结果:
+
+```python
+# 提取 MD5 (line 422-431)
+@staticmethod
+def _extract_md5(result_div) -> Optional[str]:
+    links = result_div.xpath('.//a[starts-with(@href, "/md5/")]/@href')
+    if links:
+        md5 = links[0].split('/')[-1].split('?')[0].split('#')[0]
+        return md5 or None
+```
+
+```python
+# 提取标题 — 4 种回退策略 (line 433-479)
+@staticmethod
+def _extract_title(result_div) -> Optional[str]:
+    # Strategy 1: js-vim-focus 锚点链接
+    # Strategy 2: fallback cover div 中的 data-content
+    # Strategy 3: 任意 data-content div
+    # Strategy 4: 任意 md5 锚点文本
+```
+
+```python
+# 提取作者 (line 481-504)
+@staticmethod
+def _extract_author(result_div, title: str) -> str:
+    # Strategy 1: fallback cover div 的第二个 data-content
+    # Strategy 2: icon-based 作者链接 (mdi--user-edit)
+    # Strategy 3: 与标题不同的任意 data-content
+```
+
+```python
+# 提取格式 (line 506-536)
+@staticmethod
+def _extract_formats(result_div) -> str:
+    # 优先短标签元素 (≤6 字符, 如 EPUB/PDF/MOBI)
+    # 回退: 前 200 字符全文匹配
+    # 支持: EPUB, PDF, MOBI, AZW3, CBR, CBZ, FB2, DJVU, TXT
+```
+
+```python
+# 提取文件大小 (line 658-668)
+@staticmethod
+def _extract_size(result_div) -> Optional[str]:
+    text = ' '.join(result_div.xpath('.//text()'))
+    m = _SIZE_RE.search(text)  # 匹配 "3.2 MB" 等模式
+```
+
+搜索结果类 (`SearchResult`) 包含:
+- `detail_item` → MD5 hash（用于后续下载）
+- `title` → 书名（附带文件大小标注）
+- `author` → 作者
+- `formats` → 所有格式（逗号分隔）
+- `cover_url` → Google Books ISBN 封面或 Qt 生成的本地缩略图
+- `price` → 固定为 `$0.00`
+- `drm` → `DRM_UNLOCKED`
+
+### 5.3 镜像管理与 SLUM 集成
+
+插件使用 **SLUM**（Shadow Library Uptime Monitor, https://open-slum.org）实时监控各镜像可用性:
+
+```python
+# constants.py (line 35-42)
+DEFAULT_MIRRORS = [
+    'https://annas-archive.gl',
+    'https://annas-archive.pk',
+    'https://annas-archive.gd',
+]
+
+# SLUM 端点 (line 99-100)
+_SLUM_PAGE_API = 'https://open-slum.org/api/status-page/shadow-libraries'
+_SLUM_HB_API   = 'https://open-slum.org/api/status-page/heartbeat/shadow-libraries'
+```
+
+```python
+# 镜像健康检查 (line 307-336)
+@staticmethod
+def _check_mirror_health(mirror: str, timeout: int = 5) -> bool:
+    # HTTP HEAD 请求验证连通性
+    # 结果缓存 5 分钟 (TTLCache)
+    # 4xx = Cloudflare 质询但主机在线（视为健康）
+```
+
+```python
+# 镜像选择策略 (line 338-376)
+def _select_working_mirror(self, mirrors: List[str]) -> str:
+    # 优先级:
+    # 1. 上次工作的镜像（加速重复搜索）
+    # 2. SLUM 报告为 UP 的镜像
+    # 3. SLUM 未知的镜像
+    # 4. SLUM 报告为 DOWN 的镜像
+```
+
+### 5.4 下载功能 — create_browser() 核心下载拦截器
+
+**这是全书目下载的入口**。Calibre 在用户点击下载按钮时调用此方法。
+
+```python
+# annas_archive.py (line 1114-1240)
+def create_browser(self):
+    """
+    当 Calibre 准备下载时调用。
+    拦截 slow_download URL 并按以下顺序解析:
+
+    Step 1 — 从 /md5/ 页面提取直接下载链接
+             尝试所有 SLUM 报告为 UP 的 Libgen 镜像 + Sci-Hub
+             
+    Step 2 — 回退: follow slow_download redirect
+             跟随 Anna's Archive 的 HTTP 重定向到 CDN
+    """
+```
+
+#### Step 1: 直接链接提取
+
+```python
+# line 1156-1194
+# 1. 获取 SLUM 活跃的 Libgen 镜像列表
+libgen_mirrors = plugin_self._active_libgen_mirrors()
+
+# 2. 获取 /md5/{md5} 页面
+with closing(br.open(f'{primary}/md5/{md5}', timeout=20)) as f:
+    doc = html.fromstring(f.read())
+
+# 3. 提取所有外部下载链接
+ext_links = doc.xpath(
+    '//a[starts-with(@href,"http") and ('
+    'contains(@href,"libgen") or contains(@href,"sci-hub"))]'
+)
+```
+
+#### 各来源链接提取
+
+**LibGen.li** (`_get_libgen_li_link`, line 1060-1071):
+```python
+# 打开 LibGen 页面 → 查找 "GET" 按钮的 href
+with closing(br.open(url)) as resp:
+    doc    = html.fromstring(resp.read())
+    parsed = urlparse(resp.geturl())
+    base   = f'{parsed.scheme}://{parsed.netloc}'
+href = ''.join(doc.xpath('//a[h2[text()="GET"]]/@href'))
+return f'{base}/{href.lstrip("/")}'
+```
+
+**LibGen.rs** (`_get_libgen_rs_link`, line 1073-1081):
+```python
+# 打开 LibGen 页面 → 查找 h2/a[text()="GET"] 的 href
+with closing(br.open(url)) as resp:
+    doc = html.fromstring(resp.read())
+return ''.join(doc.xpath('//h2/a[text()="GET"]/@href'))
+```
+
+**Sci-Hub** (`_get_scihub_link`, line 1083-1094):
+```python
+# 打开 Sci-Hub 页面 → 查找 embed#pdf 的 src
+with closing(br.open(url)) as resp:
+    doc    = html.fromstring(resp.read())
+pdf_url = ''.join(doc.xpath('//embed[@id="pdf"]/@src'))
+```
+
+**Z-Library** (`_get_zlib_link`, line 1096-1108):
+```python
+# 打开 Z-Library 页面 → 查找 addDownloadedBook 链接
+href = ''.join(doc.xpath('//a[contains(@class,"addDownloadedBook")]/@href'))
+```
+
+#### Step 2: slow_download 回退
+
+```python
+# line 1206-1231
+for mirror in mirrors:
+    slow_url = f'{mirror}/slow_download/{md5}/0/0'
+    with closing(br.open(slow_url, timeout=30)) as resp:
+        final_url    = resp.geturl()
+        content_type = resp.info().get_content_type()
+    
+    aa_netloc = urlparse(mirror).netloc
+    redirected_away = urlparse(final_url).netloc != aa_netloc
+    is_file_download = content_type.startswith('application/')
+    
+    if redirected_away or is_file_download:
+        # 成功获取到文件
+        return original_open(final_url, *args, **kwargs)
+```
+
+### 5.5 get_details() — 非阻塞式下载注册
+
+```python
+# line 979-1004
+def get_details(self, search_result: SearchResult, timeout: int = 15):
+    # 注册 slow_download 占位符（不发起 HTTP 请求）
+    slow_url = f'{mirror}/slow_download/{search_result.detail_item}/0/0'
+    search_result.downloads[f"Anna's Archive.{fmt}"] = slow_url
+    
+    # 后台线程预热 cookies
+    threading.Thread(
+        target=self._prewarm_cookies,
+        args=(mirror,), daemon=True
+    ).start()
+```
+
+### 5.6 下载流程图
+
+```
+用户搜索 → Anna's Archive 搜索页面 → 解析结果 (md5 + 元数据)
+                      │
+用户点击下载 → get_details() 注册 slow_download URL (非阻塞)
+                      │
+                 create_browser() → 拦截器 intercepting_open()
+                      │
+              ┌───────┴───────┐
+              ▼               ▼
+      Step 1: /md5/ 页面    Step 2: slow_download
+      提取外部下载链接        HTTP 重定向跟随
+              │               │
+      ┌───────┼───────┐       │
+      ▼       ▼       ▼       ▼
+  LibGen  Sci-Hub  Z-Lib   AA CDN
+      │       │       │       │
+      └───────┴───────┴───────┘
+              │
+              ▼
+          文件下载成功
+```
+
+### 5.7 关键数据结构: 源码中定义的搜索选项
+
+来源: `constants.py` — 支持以下过滤维度:
+
+| 选项 | URL 参数 | 值示例 |
+|------|---------|--------|
+| Order | `sort` | `newest`, `largest`, `random` |
+| Content | `content` | `book_fiction`, `book_comic` |
+| Access | `acc` | `aa_download`, `torrents_available` |
+| FileType | `ext` | `epub`, `pdf`, `mobi` |
+| Source | `src` | `lgli`(LibGen), `zlib`, `ia`(Internet Archive) |
+| Language | `lang` | `zh`, `en`, `ja` (60+ 语言) |
+
+### 5.8 与 KindleFetch 方案对比
+
+| 特性 | cal-annas | KindleFetch |
+|------|----------|------------|
+| 下载源 | LibGen → Sci-Hub → slow_download (3 级回退) | LibGen 仅 |
+| 镜像发现 | SLUM 实时监控 + 健康检查 | 硬编码列表 + find_working_url |
+| LibGen 解析 | 解析 "GET" 按钮链接 | 解析 get.php 链接 |
+| 多格式支持 | 完整 (EPUB, PDF, MOBI, AZW3 等) | 依赖搜索返回 |
+| 缓存 | TTL-based (搜索结果 + 镜像健康) | 无 |
+| CAPTCHA 处理 | 浏览器头部模拟 + cookie 预热 | 无特别处理 |
+
+### 5.9 本报告源码参考
+
+以下分析基于本地克隆仓库:
+```
+/Users/svjack/temp/cal-annas/
+├── annas_archive.py   (1251 行 — 主逻辑)
+├── config.py           (403 行 — Qt 配置界面)
+├── constants.py        (241 行 — 常量 + 缓存)
+├── __init__.py         (728 字节 — 插件入口)
+└── README.md           (37 行)
+```
+
+
+## 6. Anna's Archive 深度分析
+
+> 注: 本节及后续章节基于 [a-peirogon/cal-annas](#5-核心项目-a-peirogoncal-annas) 项目的代码分析和实际验证。
 
 ### 5.1 访问方式
 
@@ -192,7 +480,7 @@ end
 
 ---
 
-## 6. Anna's Archive 藏书验证
+## 7. Anna's Archive 藏书验证
 
 ### 6.1 中文轻小说搜索结果
 
@@ -235,7 +523,7 @@ Anna's Archive 的中文古籍和轻小说馆藏非常丰富，
 
 ---
 
-## 7. 绕过 DDoS-Guard 的下载方案
+## 8. 绕过 DDoS-Guard 的下载方案
 
 ### 7.1 问题
 Anna's Archive 使用 DDoS-Guard 防护，直接通过 `slow_download` 或 `fast_download` 端点下载需要：
@@ -307,7 +595,7 @@ ZLIB_MIRROR_URLS="https://z-library.sk https://z-lib.fm https://1lib.sk https://
 
 ---
 
-## 8. 总结与推荐
+## 9. 总结与推荐
 
 ### 8.1 各场景最佳选择
 
