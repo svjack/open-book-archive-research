@@ -1199,7 +1199,92 @@ curl -L -o 构建Agentic_AI系统.pdf \
 - **vRain** (`shanleiguang/vRain`) — 中文古籍刻本风格直排 PDF 生成工具
   - 安装/配置/标记系统指南: **[svjack/vRain-guide](https://github.com/svjack/vRain-guide)**
 
+## 15. 下载 → 古籍化 → 阅读 完整闭环
 
+本调研涉及的三条工具链可串联成完整的端到端工作流：
+
+```
+Anna's Archive / LibGen       vRain                       Empty
+   ┌─────────┐            ┌───────────┐            ┌──────────────┐
+   │  EPUB   │ ──提取──→  │ 古籍风格  │ ──导入──→  │  macOS / iOS │
+   │  PDF    │   文本     │ 竖排 PDF  │   阅读     │  AI 伴读    │
+   └─────────┘            └───────────┘            └──────────────┘
+     下载                    古籍化                     阅读
+   (§2-§13)              (vRain-guide)              (§11-§12)
+```
+
+### 15.1 古籍化：vRain
+
+vRain（兀雨）将下载到的中文 EPUB/PDF 转换为古籍刻本风格的竖排 PDF：
+
+```
+EPUB ─→ 提取纯文本(.txt) ─→ 标记注入 ─→ vrain.pl ─→ 古籍风格 PDF
+```
+
+- **输入**: 从 Anna's Archive / LibGen 下载的中文 EPUB（轻小说、古籍等）
+- **输出**: 竖排、从右至左、带鱼尾/框线/夹批的刻本风格 PDF
+- **配置**: 支持最多 5 种字体回退、宣纸/竹简/朱丝栏多种画布、自动目录书签
+- **流程**: [vRain-guide](https://github.com/svjack/vRain-guide) 涵盖从环境安装、文本提取、标记注入到 PDF 生成的完整步骤
+
+### 15.2 阅读终端：Empty
+
+Empty 是一款开源 AI 伴读应用，支持 macOS 和 iPadOS，可直接导入 vRain 生成的古籍风格 PDF。
+
+#### macOS 安装
+
+```bash
+# 方式一：Homebrew（推荐）
+brew tap eurfelux/tap
+brew trust eurfelux/tap
+brew install --cask marginalia
+
+# 方式二：源码构建
+git clone https://github.com/DaviRain-Su/empty.git
+cd Empty
+open Empty.xcodeproj
+# 选择 My Mac → Cmd+R 运行
+```
+
+首次启动若遇"无法验证开发者"：
+- 系统设置 → 隐私与安全性 → 仍要打开
+- 或 `xattr -d com.apple.quarantine /Applications/marginalia.app`
+
+#### iPad 真机安装（需 Xcode + Apple Developer 账号）
+
+```bash
+# 克隆项目
+git clone https://github.com/DaviRain-Su/empty.git
+cd Empty
+open Empty.xcodeproj
+
+# Xcode 中操作：
+# 1. 选择目标设备（iPad 真机，非模拟器）
+# 2. Signing & Capabilities → Team 选你的 Apple ID
+# 3. Cmd+R 构建并部署到 iPad
+```
+
+> **详细踩坑记录**（Xcode 版本选择、开发者模式配置、dyld 崩溃修复、签名设置等）见 **[svjack/empty-builder-guide](https://github.com/svjack/empty-builder-guide)** 中的 `BUILD_GUIDE.md`。
+
+**免费账号限制**: 每 7 天需重新签名部署一次。付费 Developer 账号（$99/年）无此限制。
+
+#### 在 Empty 中阅读古籍化 PDF
+
+| 步骤 | 操作 |
+|------|------|
+| 1. 导入 | macOS: 拖拽 PDF 到 Empty 窗口 / iPad: 通过文件 App 导入 |
+| 2. 翻页 | 竖排 PDF 在 Empty 中保持原生方向，左右滑动翻页 |
+| 3. AI 伴读 | 选中文字 → 弹出工具栏（解释/翻译/总结） |
+| 4. 划词笔记 | 5 色高亮 + 便签，自动同步到 AI 记忆 |
+
+### 15.3 闭环的价值
+
+| 环节 | 解决的问题 |
+|------|-----------|
+| **下载** | Anna's Archive / LibGen 解决中文电子书获取（尤其 LibGen 不收录的 Z-Library 独占书目） |
+| **古籍化** | vRain 将普通 EPUB/PDF 转化为沉浸式古籍刻本排版，提升阅读体验 |
+| **阅读** | Empty 提供端侧 AI 伴读能力（翻译、释义、摘要），且不依赖云 API 即可在 iPad 上离线运行 |
+
+三步串联后，用户可在 iPad 上获得 **"古籍外观 + AI 内脑"** 的阅读体验——书页是刻本竖排风格，但选中文字即可调用端侧 AI 解释翻译，形成完整的数字阅读闭环。
 
 ---
 
