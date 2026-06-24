@@ -721,6 +721,8 @@ open Empty.xcodeproj
 ```
 选择 iPad/iPhone 模拟器 → `Cmd + R` 运行。
 
+> **实战构建记录**: 本调研基于 macOS 27.0 + iPadOS 27.0 完成了 Empty 从源码到 iPad 真机安装的全流程，包含 Xcode 版本选择、开发者模式配置、dyld 崩溃修复、签名设置等所有踩坑记录。详见 **[svjack/empty-builder-guide](https://github.com/svjack/empty-builder-guide)**（私有仓库）中的 `BUILD_GUIDE.md`。
+
 > **注意**: 真机部署需要 Apple Developer 账号（免费账号也可，但每 7 天需重新签名）。如有 Mac 开发环境，推荐 **vreader**（功能最全面，支持格式多，有 WebDAV 同步）；如看重隐私和 Apple Intelligence 端侧推理，推荐 **Empty**（防剧透，间隔复习，知识图谱）。
 
 ### 9.4.3 选择建议
@@ -835,6 +837,7 @@ Empty 在 macOS 上提供完整四面板深读工作台：
 - **bookdl** (`billmal071/bookdl`) ⭐15 — Go 语言 CLI 工具
 - **vreader** (`lllyys/vreader`) ⭐17 — iOS/iPadOS AI EPUB 阅读器（AI 对话、双语翻译、TTS、WebDAV）
 - **Empty** (`DaviRain-Su/empty`) ⭐11 — macOS + iOS/iPadOS 防剧透 AI 伴读（端侧 AI / BYOK）
+  - 本地构建 & 真机安装实战记录: **[svjack/empty-builder-guide](https://github.com/svjack/empty-builder-guide)**
 
 ## 10. 实际下载验证
 
