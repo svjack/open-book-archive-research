@@ -1101,6 +1101,67 @@ def resolve_external_link(url):
 3. **慢速下载通道不可 CLI 自动化**: DDoS-Guard + CDN 限速双重阻挡，curl/Python 均不可用
 4. **格式支持**: 下载的 EPUB/PDF 均可在标准阅读器中正常打开
 
+### 13.5 新增实践: Z-Library 独占书目的场景 B 完整演示
+
+2026-06-24 以《构建Agentic AI系统：打造能推理、可规划、自适应的AI智能体》（清华大学出版社，2026，PDF 26.1MB）为例，完整走通了 Z-Library 独占书目的下载流程。
+
+#### 关键步骤
+
+```bash
+# 1. Anna's Archive 搜索（不加 &src=lgli，让 zlib 源也出现）
+cmux --json browser open \
+  "https://annas-archive.gl/search?q=构建Agentic+AI系统+打造能推理&lang=zh" \
+  --workspace "${CMUX_WORKSPACE_ID}"
+```
+
+搜索结果的 PDF 项 `md5=10e320702f5072a8827fe1cec302907b`（zlib 源）。
+
+```bash
+# 2. 在详情页点击 "Slow Partner Server #1"
+#    DDoS-Guard 由浏览器自动处理
+```
+
+跳转到 `slow_download/{md5}/0/0` 页面。
+
+```bash
+# 3. 点击 "📚 Download now"
+```
+
+浏览器打开 partner server（`wbsg8v.xyz`）的新标签页，但该标签页**显示空白**（浏览器无法内联渲染 partner server 返回的 PDF）。
+
+```bash
+# 4. 从 slow_download 页面 DOM 中提取直链，用 curl 完成下载
+curl -L -o 构建Agentic_AI系统.pdf \
+  -H "User-Agent: Mozilla/5.0" \
+  -H "Referer: https://annas-archive.gl/" \
+  "https://wbsg8v.xyz/d3/y/.../构建Agentic%20AI系统...10e320702f50...pdf"
+```
+
+#### 为什么 curl 能成功而不被 DDoS-Guard 阻挡
+
+| 阶段 | 方式 | DDoS-Guard |
+|------|------|-----------|
+| 获取直链 | cmux 浏览器请求 `slow_download` | ✅ 浏览器自动通过 JS 质询 |
+| 下载文件 | curl 请求 partner server 直链 | ✅ 直链已通过验证，不再触达 DDoS-Guard |
+
+**核心要点**: 浏览器只负责**过 DDoS-Guard 并获取临时直链**，直链提取后可由任意 HTTP 客户端下载。`slow_download` 页面显示 "📚 Download now" 时，页面 DOM 中已经包含 `wbsg8v.xyz` 的直链（可通过 `cmux browser surface:N eval "document.body.innerText"` 提取）。
+
+#### 注意事项
+
+- partner server 有**并发限制**（"Too many downloads at the same time from the same IP"），首次点 "Download now" 打开的新标签页会触发限流；关闭多余标签页后重试即可
+- 新标签页打开后可能显示空白，这是 PDF 在内嵌浏览器中无法渲染的预期行为，不影响文件本身的完整性
+- PDF 大小 26.1MB，MD5 校验通过，文件格式为 `PDF document v1.3`
+
+#### 下载统计
+
+| 指标 | 数值 |
+|------|------|
+| 搜索尝试 | 1 次 |
+| 候选 md5 | 1 个（zlib 源） |
+| cmux 浏览器耗时（DDoS-Guard + 导航） | ~30s |
+| curl 下载耗时 | ~76s（~335KB/s） |
+| 最终文件 | `构建Agentic AI系统.pdf` (24.9MB) |
+
 
 ## 14. 总结与推荐
 
